@@ -1,0 +1,46 @@
+
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 605134461257.dkr.ecr.ap-south-1.amazonaws.com
+      - echo Installing dependencies...
+      - cd new-app/ft
+      - npm install
+
+      - echo Setting environment variables...
+      - cd ../..
+      - REPOSITORY_URI=605134461257.dkr.ecr.ap-south-1.amazonaws.com/frontend
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=commit-$COMMIT_HASH
+      - echo $REPOSITORY_URI:$IMAGE_TAG > frontend-image-uri.txt
+      - echo "✅ Image tag written to frontend-image-uri.txt"
+
+  build:
+    commands:
+      - echo Build started on `date`
+      - cd new-app/ft
+      - npm run build
+
+      - echo Building Docker image...
+      - cd ../..
+      - docker build -t $REPOSITORY_URI:latest -t $REPOSITORY_URI:$IMAGE_TAG ./new-app/ft
+
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo "✅ Docker images pushed successfully"
+
+artifacts:
+  files:
+    - frontend-image-uri.txt
+  base-directory: '.'
