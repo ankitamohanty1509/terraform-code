@@ -1,4 +1,3 @@
-
 version: 0.2
 
 phases:
@@ -27,30 +26,19 @@ phases:
 
   build:
     commands:
-      - |
-        FRONTEND_IMAGE=605134461257.dkr.ecr.us-east-1.amazonaws.com/frontend:latest
-        BACKEND_IMAGE=605134461257.dkr.ecr.us-east-1.amazonaws.com/backend:latest
-        echo "Frontend: $FRONTEND_IMAGE"
-        echo "Backend: $BACKEND_IMAGE"
-        echo "=== Starting Simple Deployment ==="
-        echo "Deployment started at $(date)"
-        echo "Checking cluster connectivity..."
-        kubectl get nodes || echo "Warning: Cannot get nodes"
-        echo "Updating frontend deployment..."
-        kubectl set image deployment/frontend frontend=$FRONTEND_IMAGE -n default || echo "Frontend update failed"
-        echo "Updating backend deployment..."
-        kubectl set image deployment/backend backend=$BACKEND_IMAGE -n default || echo "Backend update failed"
-        echo "Forcing fresh image pulls..."
-        kubectl delete pods -l app=frontend -n default --force --grace-period=0 || echo "No frontend pods to delete"
-        kubectl delete pods -l app=backend -n default --force --grace-period=0 || echo "No backend pods to delete"
-        echo "Waiting for rollouts..."
-        kubectl rollout status deployment/frontend -n default --timeout=300s || echo "Frontend rollout failed"
-        kubectl rollout status deployment/backend -n default --timeout=300s || echo "Backend rollout failed"
+      - echo "=== Deploying Kubernetes YAMLs ==="
+      - kubectl apply -f backend-deployment.yaml || echo "Failed to apply backend-deployment.yaml"
+      - kubectl apply -f backend-service.yaml || echo "Failed to apply backend-service.yaml"
+      - kubectl apply -f frontend-deployment.yaml || echo "Failed to apply frontend-deployment.yaml"
+      - kubectl apply -f frontend-service.yaml || echo "Failed to apply frontend-service.yaml"
+      - echo "Waiting for frontend rollout..."
+      - kubectl rollout status deployment/frontend -n default --timeout=300s || echo "Frontend rollout failed"
+      - echo "Waiting for backend rollout..."
+      - kubectl rollout status deployment/backend -n default --timeout=300s || echo "Backend rollout failed"
 
   post_build:
     commands:
       - echo "=== Deployment Summary ==="
-      - echo "Deployment completed at $(date)"
       - echo "Deployments:"
       - kubectl get deployments -n default || echo "Cannot get deployments"
       - echo "Pods:"
@@ -61,4 +49,4 @@ phases:
 artifacts:
   files:
     - '**/*'
-  base-directory: '.' 
+  base-directory: '.'
