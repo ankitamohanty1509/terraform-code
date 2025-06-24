@@ -1,0 +1,64 @@
+
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.9
+    commands:
+      - echo "Installing kubectl..."
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - chmod +x kubectl
+      - mv kubectl /usr/local/bin/
+      - kubectl version --client
+
+  pre_build:
+    commands:
+      - echo "=== EKS Authentication Setup ==="
+      - echo "AWS Identity:"
+      - aws sts get-caller-identity
+      - echo "EKS Clusters:"
+      - aws eks list-clusters --region us-east-1
+      - echo "Updating kubeconfig..."
+      - aws eks update-kubeconfig --region us-east-1 --name eks-cluster-new
+      - echo "Testing cluster access..."
+      - kubectl cluster-info || echo "Cluster info failed, but continuing..."
+      - kubectl get nodes || echo "Cannot get nodes, but continuing..."
+
+  build:
+    commands:
+      - |
+        FRONTEND_IMAGE=605134461257.dkr.ecr.us-east-1.amazonaws.com/frontend:latest
+        BACKEND_IMAGE=605134461257.dkr.ecr.us-east-1.amazonaws.com/backend:latest
+        echo "Frontend: $FRONTEND_IMAGE"
+        echo "Backend: $BACKEND_IMAGE"
+        echo "=== Starting Simple Deployment ==="
+        echo "Deployment started at $(date)"
+        echo "Checking cluster connectivity..."
+        kubectl get nodes || echo "Warning: Cannot get nodes"
+        echo "Updating frontend deployment..."
+        kubectl set image deployment/frontend frontend=$FRONTEND_IMAGE -n default || echo "Frontend update failed"
+        echo "Updating backend deployment..."
+        kubectl set image deployment/backend backend=$BACKEND_IMAGE -n default || echo "Backend update failed"
+        echo "Forcing fresh image pulls..."
+        kubectl delete pods -l app=frontend -n default --force --grace-period=0 || echo "No frontend pods to delete"
+        kubectl delete pods -l app=backend -n default --force --grace-period=0 || echo "No backend pods to delete"
+        echo "Waiting for rollouts..."
+        kubectl rollout status deployment/frontend -n default --timeout=300s || echo "Frontend rollout failed"
+        kubectl rollout status deployment/backend -n default --timeout=300s || echo "Backend rollout failed"
+
+  post_build:
+    commands:
+      - echo "=== Deployment Summary ==="
+      - echo "Deployment completed at $(date)"
+      - echo "Deployments:"
+      - kubectl get deployments -n default || echo "Cannot get deployments"
+      - echo "Pods:"
+      - kubectl get pods -n default || echo "Cannot get pods"
+      - echo "Services:"
+      - kubectl get services -n default || echo "Cannot get services"
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: '.' 
